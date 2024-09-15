@@ -1,0 +1,63 @@
+import sys
+from awsglue.transforms import *
+from awsglue.utils import getResolvedOptions
+from pyspark.context import SparkContext
+from awsglue.context import GlueContext
+from pyspark.sql import SparkSession
+
+# Initialize Spark and Glue contexts
+spark_context = SparkContext()
+glue_context = GlueContext(spark_context)
+spark_session = glue_context.spark_session
+job = glueContext.Job(args['JOB_NAME'])
+job.init(args['JOB_NAME'], args)
+
+# Parameters
+args = getResolvedOptions(sys.argv, ['JOB_NAME'])
+
+# Create dynamic frame from S3
+source_dyf = glue_context.create_dynamic_frame.from_catalog(database="your_database_name", table_name="your_table_name", transformation_ctx="source_dyf")
+
+# Convert dynamic frame to data frame
+source_df = source_dyf.toDF()
+
+# Process the data (Example: Splitting data into two tables)
+table1_df = source_df.select("column1", "column2", "column3")  # Adjust column names accordingly
+table2_df = source_df.select("column4", "column5", "column6")  # Adjust column names accordingly
+
+# Write data to corresponding tables
+glue_context.write_dynamic_frame.from_catalog(frame=DynamicFrame.fromDF(table1_df, glue_context, "table1_df"), 
+                                               database="your_database_name", 
+                                               table_name="table1",
+                                               transformation_ctx="datasink_table1")
+
+glue_context.write_dynamic_frame.from_catalog(frame=DynamicFrame.fromDF(table2_df, glue_context, "table2_df"), 
+                                               database="your_database_name", 
+                                               table_name="table2",
+                                               transformation_ctx="datasink_table2")
+
+## Write DataFrame to RDS table
+jdbc_url = "jdbc:mysql://your-rds-endpoint:3306/your_database"
+table = "your_rds_table"
+username = "your_username"
+password = "your_password"
+
+table1_df.write.format("jdbc") \
+    .option("url", jdbc_url) \
+    .option("dbtable", table) \
+    .option("user", username) \
+    .option("password", password) \
+    .mode("append") \
+    .save()
+    
+table2_df.write.format("jdbc") \
+    .option("url", jdbc_url) \
+    .option("dbtable", table) \
+    .option("user", username) \
+    .option("password", password) \
+    .mode("append") \
+    .save()
+
+job.commit()                                           
+
+
