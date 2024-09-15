@@ -1,0 +1,41 @@
+#import boto3
+import sys
+from awsglue.transforms import *
+from awsglue.utils import getResolvedOptions
+from pyspark.context import SparkContext
+from pyspark.sql.functions import *
+from pyspark.sql.types import *
+from awsglue.context import GlueContext
+from awsglue.job import Job
+#from pyspark.sql import SparkSession
+#from awsglue.dynamicframe import DynamicFrame
+#import os 
+
+
+# Initialize Spark and Glue contexts
+spark_context = SparkContext.getOrCreate()
+glue_context = GlueContext(spark_context)
+spark = glue_context.spark_session
+job = Job(glue_context)
+
+# Parameters
+args = getResolvedOptions(sys.argv, ["JOB_NAME"])
+
+job.init(args["JOB_NAME"], args)
+
+source_df = spark.read.csv("s3://path", header="true")
+source_df.cache()
+source_df.createOrReplaceTempView('source_df_tmp_tbl') 
+table1_df = spark.sql("select employer_id, employer_name, employer_address, employer_zipcode from source_df_tmp_tbl")
+table2_df = spark.sql("select employee_id, employee_name, employee_grade, employee_salary,employee_total_experience from source_df_tmp_tbl")
+
+mode = "overwrite"
+url = 'jdbc:postgresql://"host_or_endpoint"/"DB_name"'         
+# .option("url", "jdbc:postgresql://your_rds_endpoint:5432/your_database")
+
+properties = {"user" : "usrname", "password" : "pswd", "driver" : 'org.postgresql.Driver', "truncate" : "true"}
+
+table1_df.write.jdbc(url = url, table = "schema.table1_name", mode = mode, properties = properties)
+table2_df.write.jdbc(url = url, table = "schema.table2_name", mode = mode, properties = properties)
+
+job.commit()
